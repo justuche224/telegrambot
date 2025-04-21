@@ -12,9 +12,7 @@
       "resolveJsonModule": true,
       "outDir": "./dist",
       "rootDir": "./src",
-      "noEmit": true,
       "types": ["node"],
-      "allowImportingTsExtensions": true,
       "verbatimModuleSyntax": true,
       "incremental": true
     },
