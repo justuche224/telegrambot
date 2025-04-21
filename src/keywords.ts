@@ -3,6 +3,19 @@ import type { Message, Update } from 'telegraf/typings/core/types/typegram';
 
 let ctx: NarrowedContext<Context<Update>, Update.MessageUpdate<Record<"text", {}> & Message.TextMessage>>
 
+const problemResponse = {
+  text: `
+    <b>Experiencing an Issue?</b>
+
+    We're sorry to hear you're facing a problem. Please describe the issue you're encountering in detail.
+
+    Alternatively, you can contact our support team directly via email for assistance.
+  `,
+  extra: Markup.inlineKeyboard([
+    [ Markup.button.url('📧 Contact Us', 'https://ecohavest.org/contact') ]
+  ])
+};
+
 export const keywordResponses: Record<string, {
   text: string;
   extra?: Parameters<typeof ctx.replyWithHTML>[1];
@@ -11,9 +24,9 @@ export const keywordResponses: Record<string, {
     text: `
 <b>KYC Verification Guide</b>
 
-1️⃣ Upload a clear photo of your ID (passport, driver’s license)  
+1️⃣ Upload a clear photo of your ID (passport, driver's license)  
 2️⃣ Provide proof of address (utility bill, bank statement)  
-3️⃣ Allow up to 24 hours for review.
+3️⃣ Allow up to 24 hours for review.
     `,
     extra: Markup.inlineKeyboard([
       [ Markup.button.url('📄 KYC Docs', 'https://ecohavest.org/dashboard/account/kyc') ],
@@ -29,5 +42,9 @@ export const keywordResponses: Record<string, {
 • Start trading instantly!
     `
   },
-  // …add more keywords here
+ problem: problemResponse,
+ issue: problemResponse,
+ issues: problemResponse,
+ trouble: problemResponse,
+ other: problemResponse
 };
