@@ -12,6 +12,9 @@ const port = process.env.PORT || 8080
 const app = express();
 const bot = new Telegraf(process.env.BOT_TOKEN!!);
 app.use(await bot.createWebhook({ domain: webhookDomain }));
+app.get('/', (req, res) => {
+  res.send('hello world from aria telegram bot')
+})
 
 async function sendCryptoUpdates() {
   try {
