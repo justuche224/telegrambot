@@ -1,22 +1,200 @@
-import { Telegraf, Markup, type Context } from "telegraf";
-import express from "express";
+import { Telegraf, Markup, type Context , type NarrowedContext} from "telegraf";
+// import express from "express";
 import cron from 'node-cron';
 import { message } from "telegraf/filters";
-import { keywordResponses } from "./keywords.js";
-import { fetchCryptoData, formatCryptoMessage } from "./crypto.js";
-import { fetchCryptoNews, formatNewsMessage } from "./news.js";
+// import { keywordResponses } from "./keywords.js";
+import type { Message, Update } from 'telegraf/typings/core/types/typegram';
+
+let ctx: NarrowedContext<Context<Update>, Update.MessageUpdate<Record<"text", {}> & Message.TextMessage>>
+
+const problemResponse = {
+  text: `
+    <b>Experiencing an Issue?</b>
+
+    We're sorry to hear you're facing a problem. Please describe the issue you're encountering in detail.
+
+    Alternatively, you can contact our support team directly via email for assistance.
+  `,
+  extra: Markup.inlineKeyboard([
+    [ Markup.button.url('📧 Contact Us', 'https://ecohavest.org/contact') ]
+  ])
+};
+
+export const keywordResponses: Record<string, {
+  text: string;
+  extra?: Parameters<typeof ctx.replyWithHTML>[1];
+}> = {
+  kyc: {
+    text: `
+<b>KYC Verification Guide</b>
+
+1️⃣ Upload a clear photo of your ID (passport, driver's license)  
+2️⃣ Provide proof of address (utility bill, bank statement)  
+3️⃣ Allow up to 24 hours for review.
+    `,
+    extra: Markup.inlineKeyboard([
+      [ Markup.button.url('📄 KYC Docs', 'https://ecohavest.org/dashboard/account/kyc') ],
+      [ Markup.button.callback('❓ Need Help?', 'kyc_help') ]
+    ])
+  },
+  signup: {
+    text: `
+<b>How to Sign Up</b>
+
+• Go to ${Markup.button.url('Signup Page','https://ecohavest.org/signup')}  
+• Fill in your details and verify your email  
+• Start trading instantly!
+    `
+  },
+ problem: problemResponse,
+ issue: problemResponse,
+ issues: problemResponse,
+ trouble: problemResponse,
+ other: problemResponse
+};
+
+
+
+// import { fetchCryptoData, formatCryptoMessage } from "./crypto.js";
+
+import axios from 'axios';
+import type { CoinRankingApiResponse, Coin } from './types';
+
+const API_URL = 'https://api.coinranking.com/v2/coins?limit=10&timePeriod=3h';
+
+/**
+ * Fetches cryptocurrency data from the CoinRanking API.
+ * @returns {Promise<CoinRankingApiResponse | null>} The API response data or null if an error occurs.
+ */
+export async function fetchCryptoData(): Promise<CoinRankingApiResponse | null> {
+  try {
+    // API key if required by CoinRanking for production use
+    // const response = await axios.get(API_URL, {
+    //   headers: { 'x-access-token': 'YOUR_API_KEY' }
+    // });
+    const response = await axios.get<CoinRankingApiResponse>(API_URL);
+
+    if (response.data.status === 'success') {
+      return response.data;
+    } else {
+      console.error('CoinRanking API returned status:', response.data.status);
+      return null;
+    }
+  } catch (error) {
+    console.error('Error fetching crypto data:', error instanceof Error ? error.message : error);
+    return null;
+  }
+}
+
+/**
+ * Formats the cryptocurrency data into a human-readable string.
+ * @param {CoinRankingApiResponse} data - The data fetched from the CoinRanking API.
+ * @returns {string} A formatted string summarizing the top coins.
+ */
+export function formatCryptoMessage(data: CoinRankingApiResponse): string {
+  if (!data || data.status !== 'success' || !data.data?.coins?.length) {
+    return 'Could not retrieve cryptocurrency data at this time.';
+  }
+
+  const topCoins = data.data.coins.slice(0, 10);
+
+  let message = '<b>📊 Top 10 Crypto Updates (Last 3h):</b>\n\n';
+
+  topCoins.forEach((coin: Coin) => {
+    const price = parseFloat(coin.price).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
+    const change = parseFloat(coin.change);
+    const changeSymbol = change > 0 ? '📈' : (change < 0 ? '📉' : '➡️');
+    message += `<b>${coin.name} (${coin.symbol})</b>\n`;
+    message += `  Price: ${price}\n`;
+    message += `  Change: ${changeSymbol} ${change}%\n\n`; // Added newline for spacing
+  });
+
+  // Add market stats if needed
+  const stats = data.data.stats;
+  message += `\n<b>Market Stats:</b>\n`;
+  message += `  Total Coins: ${stats.totalCoins.toLocaleString()}\n`;
+  message += `  Total Market Cap: ${parseFloat(stats.totalMarketCap).toLocaleString('en-US', { style: 'currency', currency: 'USD' })}\n`; // Note: API gives short string, this might not be accurate
+  message += `  Total 24h Vol: ${parseFloat(stats.total24hVolume).toLocaleString('en-US', { style: 'currency', currency: 'USD' })}\n`;
+
+  return message;
+} 
+
+
+// import { fetchCryptoNews, formatNewsMessage } from "./news.js";
+
+import type { NewsApiResponse, Article } from './types';
+
+const NEWS_API_KEY = process.env.NEWS_API_ORG_KEY;
+const NEWS_API_URL = `https://newsapi.org/v2/everything?q=crypto&pageSize=5&apiKey=${NEWS_API_KEY}`;
+
+/**
+ * Fetches recent cryptocurrency news from the NewsAPI.
+ * @returns {Promise<NewsApiResponse | null>} The API response data or null if an error occurs.
+ */
+export async function fetchCryptoNews(): Promise<NewsApiResponse | null> {
+  if (!NEWS_API_KEY) {
+    console.error('NewsAPI key is missing. Please set the NEWS_API_KEY environment variable.');
+    return null;
+  }
+
+  try {
+    const response = await axios.get<NewsApiResponse>(NEWS_API_URL);
+
+    if (response.data.status === 'ok') {
+      return response.data;
+    } else {
+      // Handle API-specific errors (e.g., invalid key)
+      console.error(`NewsAPI returned status: ${response.data.status}`, response.data.message);
+      return response.data; // Return the error response for potential handling
+    }
+  } catch (error) {
+    console.error('Error fetching crypto news:', error instanceof Error ? error.message : error);
+    // Check if it's an Axios error for more details
+    if (axios.isAxiosError(error) && error.response) {
+      console.error('NewsAPI error details:', error.response.data);
+    }
+    return null;
+  }
+}
+
+/**
+ * Formats the news articles into a human-readable string.
+ * @param {NewsApiResponse} data - The data fetched from the NewsAPI.
+ * @returns {string} A formatted string summarizing the top news articles.
+ */
+export function formatNewsMessage(data: NewsApiResponse): string {
+  if (!data || data.status !== 'ok' || !data.articles?.length) {
+    let errorMessage = 'Could not retrieve cryptocurrency news at this time.';
+    if(data?.status === 'error') {
+        errorMessage += ` (API Error: ${data.message || 'Unknown'})`;
+    }
+    return errorMessage;
+  }
+
+  let message = '<b>📰 Latest Crypto News:</b>\n\n';
+
+  data.articles.forEach((article: Article, index: number) => {
+    message += `${index + 1}. <a href="${article.url}">${article.title}</a>\n`;
+    message += `   <i>Source: ${article.source.name}</i>\n\n`;
+  });
+
+  return message;
+} 
+
+
+
 const CHAT_ID = process.env.TARGET_CHAT_ID!;
-const webhookDomain = process.env.WEBHOOK_DOMAIN!!
-const port = process.env.PORT || 8080
+// const webhookDomain = process.env.WEBHOOK_DOMAIN!!
+// const port = process.env.PORT || 8080
 const bot_token = process.env.BOT_TOKEN!!
 console.log(bot_token)
 
-const app = express();
+// const app = express();
 const bot = new Telegraf(bot_token);
-app.use(await bot.createWebhook({ domain: webhookDomain }));
-app.get('/', (req, res) => {
-  res.send('hello world from aria telegram bot')
-})
+// app.use(await bot.createWebhook({ domain: webhookDomain }));
+// app.get('/', (req, res) => {
+//   res.send('hello world from aria telegram bot')
+// })
 
 async function sendCryptoUpdates() {
   try {
@@ -239,11 +417,11 @@ bot.action('kyc_help', (ctx) => {
 // Bot Launch & Error Handling
 // ============================================================================
 
-app.listen(port, () => console.log("Listening on port", port));
-// bot.launch()
-// console.log("Bot started successfully!");
+// app.listen(port, () => console.log("Listening on port", port));
+bot.launch()
+console.log("Bot started successfully!");
 
-cron.schedule('0 */3 * * *', sendCryptoUpdates, {
+cron.schedule('0 */6 * * *', sendCryptoUpdates, {
   timezone: 'UTC'
 });
 // sendCryptoUpdates();
