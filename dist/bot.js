@@ -1,11 +1,19 @@
 import { Telegraf, Markup } from "telegraf";
+import express from "express";
 import cron from 'node-cron';
 import { message } from "telegraf/filters";
 import { keywordResponses } from "./keywords";
 import { fetchCryptoData, formatCryptoMessage } from "./crypto";
 import { fetchCryptoNews, formatNewsMessage } from "./news";
-const bot = new Telegraf(process.env.BOT_TOKEN);
 const CHAT_ID = process.env.TARGET_CHAT_ID;
+const webhookDomain = process.env.WEBHOOK_DOMAIN;
+const port = process.env.PORT || 8080;
+const app = express();
+const bot = new Telegraf(process.env.BOT_TOKEN);
+app.use(await bot.createWebhook({ domain: webhookDomain }));
+app.get('/', (req, res) => {
+    res.send('hello world from aria telegram bot');
+});
 async function sendCryptoUpdates() {
     try {
         const [cryptoData, newsData] = await Promise.all([
@@ -191,7 +199,7 @@ bot.action('kyc_help', (ctx) => {
 // ============================================================================
 // Bot Launch & Error Handling
 // ============================================================================
-bot.launch();
+app.listen(port, () => console.log("Listening on port", port));
 console.log("Bot started successfully!");
 cron.schedule('0 */6 * * *', sendCryptoUpdates, {
     timezone: 'UTC'
